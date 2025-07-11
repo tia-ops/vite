@@ -2,11 +2,12 @@ import React, { useEffect, useState } from "react";
 import Chard from "../components/Chard";
 import axios from "axios";
 
-export default function ProfilePage() {
+export default function ProfilePage({ role }) {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    axios.get("/backend/profile.php").then(r => setUser(r.data));
+    axios.get("https://sinyalrmb.net/backend/profile.php", { withCredentials: true })
+      .then(r => setUser(r.data));
   }, []);
 
   return (
@@ -19,6 +20,7 @@ export default function ProfilePage() {
           <>
             <div className="mb-2">Username: <b>{user.username}</b></div>
             <div className="mb-2">Email: <b>{user.email}</b></div>
+            <div className="mb-2">Role: <b>{role}</b></div>
             <div className="mb-2">Bergabung: <b>{user.created_at}</b></div>
           </>
         )}

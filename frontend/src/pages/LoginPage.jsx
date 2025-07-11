@@ -12,9 +12,12 @@ export default function LoginPage({ onLogin }) {
     e.preventDefault();
     setErr("");
     try {
-      await axios.post("/backend/login.php", { username, password });
-      onLogin();
-    } catch {
+      const res = await axios.post(
+        "https://sinyalrmb.net/backend/login.php", // ganti dengan domain backend kamu jika berbeda
+        { username, password }
+      );
+      onLogin(res.data.role);
+    } catch (e) {
       setErr("Login gagal");
     }
   };
