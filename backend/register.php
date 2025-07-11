@@ -21,6 +21,12 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     sendResponse(['error' => 'Format email tidak valid'], 400);
 }
 
+// Validasi kekuatan password (minimal 8 karakter, 1 huruf besar, 1 huruf kecil, 1 angka)
+if (strlen($password) < 8 || !preg_match('/[A-Z]/', $password) || !preg_match('/[a-z]/', $password) || !preg_match('/[0-9]/', $password)) {
+    sendResponse(['error' => 'Password harus minimal 8 karakter dan mengandung huruf besar, huruf kecil, dan angka.'], 400);
+}
+
+
 $db = getDB();
 $stmt = $db->prepare("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1");
 $stmt->execute([$username, $email]);

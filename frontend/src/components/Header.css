@@ -1,0 +1,36 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  background-color: #1a1f2c;
+  height: 60px;
+  position: fixed; /* Fixed agar selalu di atas */
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1050; /* Z-index PALING TINGGI */
+  border-bottom: 1px solid #333;
+}
+
+.header-title {
+  color: #ffcc44;
+  font-weight: 600;
+}
+
+.header-toggle-button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  margin-right: 1rem;
+  padding: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .header-toggle-button {
+    display: none;
+  }
+  .app-header {
+    left: 280px;
+  }
+}

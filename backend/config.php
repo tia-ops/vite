@@ -1,5 +1,13 @@
 <?php
 // FILE: backend/config.php
+
+// Load environment variables from .env file
+// Anda perlu menginstal package seperti vlucas/phpdotenv jika belum ada
+// composer require vlucas/phpdotenv
+require_once __DIR__ . '/vendor/autoload.php';
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
 $allowed_origins = [
     'https://solid-space-fishstick-4jrp59j7665rcq9q4-5173.app.github.dev',
 ];
@@ -17,10 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit();
 }
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'sinz3385_trader_app');
-define('DB_USER', 'sinz3385_alazca');
-define('DB_PASS', 'Koplak450');
+// Gunakan environment variables
+define('DB_HOST', $_ENV['DB_HOST']);
+define('DB_NAME', $_ENV['DB_NAME']);
+define('DB_USER', $_ENV['DB_USER']);
+define('DB_PASS', $_ENV['DB_PASS']);
 
 define('BINANCE_API_BASE_URL', 'https://fapi.binance.com');
 
