@@ -13,8 +13,9 @@ export default function LoginPage({ onLogin }) {
     setErr("");
     try {
       const res = await axios.post(
-        "https://sinyalrmb.net/backend/login.php", // ganti dengan domain backend kamu jika berbeda
-        { username, password }
+        "https://sinyalrmb.net/backend/login.php",
+        { username, password },
+        { withCredentials: true }
       );
       onLogin(res.data.role);
     } catch (e) {

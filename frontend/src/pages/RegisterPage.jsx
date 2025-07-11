@@ -12,8 +12,9 @@ export default function RegisterPage() {
     setMsg("");
     try {
       await axios.post(
-        "https://sinyalrmb.net/backend/register.php", // ganti dengan domain backend kamu jika berbeda
-        form
+        "https://sinyalrmb.net/backend/register.php",
+        form,
+        { withCredentials: true }
       );
       setMsg("Registrasi berhasil, silakan login");
     } catch {

@@ -20,28 +20,39 @@ export default function DashboardPage({ role }) {
     setFunding(null)
     setRatio(null)
 
-    fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${pair}`)
+    // PRICE
+    fetch(`https://sinyalrmb.net/backend/api/price.php?symbol=${pair}`, { credentials: "include" })
       .then(res => res.json())
       .then(data => {
-        if (!stop) {
-          setChange(data.priceChangePercent)
-          setHigh(data.highPrice)
-          setLow(data.lowPrice)
+        if (!stop && data && data.price) {
+          setPrice(data.price)
         }
       })
 
-    fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${pair}`)
+    // KLINE (ambil high/low 24 jam, biasanya pakai interval 1d)
+    fetch(`https://sinyalrmb.net/backend/api/kline.php?symbol=${pair}&interval=1d&limit=1`, { credentials: "include" })
       .then(res => res.json())
       .then(data => {
-        if (!stop) {
-          setFunding(data.lastFundingRate)
+        if (!stop && Array.isArray(data) && data.length > 0) {
+          setHigh(data[0][2]) // high
+          setLow(data[0][3])  // low
         }
       })
 
-    fetch(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${pair}&limit=1`)
+    // FUNDING
+    fetch(`https://sinyalrmb.net/backend/api/funding.php?symbol=${pair}`, { credentials: "include" })
       .then(res => res.json())
       .then(data => {
-        if (!stop && data && data.length > 0) {
+        if (!stop && Array.isArray(data) && data.length > 0) {
+          setFunding(data[0].fundingRate)
+        }
+      })
+
+    // LONG SHORT RATIO
+    fetch(`https://sinyalrmb.net/backend/api/longshort.php?symbol=${pair}`, { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (!stop && Array.isArray(data) && data.length > 0) {
           const ratioValue = parseFloat(data[0].longShortRatio)
           if (!isNaN(ratioValue)) setRatio(ratioValue)
         }
@@ -51,6 +62,7 @@ export default function DashboardPage({ role }) {
     return () => { stop = true }
   }, [pair])
 
+  // Untuk harga realtime, bisa tetap pakai WebSocket Binance (atau next step pakai backend kalau mau scalable)
   useEffect(() => {
     if (ws.current) ws.current.close()
     setPrice(null)

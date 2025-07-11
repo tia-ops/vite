@@ -11,12 +11,17 @@ export default function DropdownSymbols({ value, onSelect }) {
 
   useEffect(() => {
     setLoading(true)
-    axios.get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+    axios.get("https://sinyalrmb.net/backend/api/symbols.php", { withCredentials: true })
       .then(res => {
-        const list = res.data.symbols
-          .filter(s => s.contractType === "PERPETUAL")
-          .map(s => s.symbol)
-          .sort()
+        const raw = res.data
+        let list = []
+        // Jika data Binance, ambil symbols PERPETUAL
+        if (raw && raw.symbols) {
+          list = raw.symbols
+            .filter(s => s.contractType === "PERPETUAL")
+            .map(s => s.symbol)
+            .sort()
+        }
         setSymbols(list)
         setLoading(false)
       })

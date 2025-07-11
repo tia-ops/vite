@@ -20,8 +20,7 @@ export default function ProfilePage({ role }) {
           <>
             <div className="mb-2">Username: <b>{user.username}</b></div>
             <div className="mb-2">Email: <b>{user.email}</b></div>
-            <div className="mb-2">Role: <b>{role}</b></div>
-            <div className="mb-2">Bergabung: <b>{user.created_at}</b></div>
+            <div className="mb-2">Role: <b>{user.role}</b></div>
           </>
         )}
       </Chard>
