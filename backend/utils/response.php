@@ -1,7 +1,7 @@
 <?php
-function sendResponse($data, $code=200) {
+// FILE: backend/utils/response.php
+function sendResponse($data, $code = 200) {
     http_response_code($code);
-    header('Content-Type: application/json');
     echo json_encode($data);
     exit;
 }

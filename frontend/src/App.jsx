@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import LoginPage from "./pages/LoginPage";
@@ -7,25 +7,26 @@ import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import axios from "axios";
+import API_BASE_URL from "./apiConfig";
 
 function App() {
   const [authed, setAuthed] = useState(false);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Cek session otomatis di awal (profile.php)
-  React.useEffect(() => {
-    axios.get("https://sinyalrmb.net/backend/profile.php", { withCredentials: true })
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/profile.php`, { withCredentials: true })
       .then(res => {
         if (res.data && res.data.role) {
           setAuthed(true);
-          setRole(res.data.role);
+          setRole(res.data.role); // Perbaikan: Akses role langsung
         }
-        setLoading(false);
       })
       .catch(() => {
         setAuthed(false);
         setRole(null);
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, []);
@@ -36,9 +37,12 @@ function App() {
   };
 
   const handleLogout = () => {
-    setAuthed(false);
-    setRole(null);
-    // Opsional: panggil endpoint logout.php di backend jika ada
+    axios.post(`${API_BASE_URL}/logout.php`, {}, { withCredentials: true })
+      .then(() => {
+        setAuthed(false);
+        setRole(null);
+      })
+      .catch(console.error);
   };
 
   if (loading) return <div style={{ minHeight: "100vh", background: "#1a2235" }} />;

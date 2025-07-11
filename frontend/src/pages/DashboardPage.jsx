@@ -1,105 +1,120 @@
-import React, { useEffect, useState, useRef } from "react"
-import DropdownSymbols from "../components/DropdownSymbols"
-import CardGlass from "../components/CardGlass"
+import React, { useEffect, useState, useRef } from "react";
+import DropdownSymbols from "../components/DropdownSymbols";
+import CardGlass from "../components/CardGlass";
+import API_BASE_URL from "../apiConfig";
 
 export default function DashboardPage({ role }) {
-  const [pair, setPair] = useState("BTCUSDT")
-  const [price, setPrice] = useState(null)
-  const [change, setChange] = useState(null)
-  const [high, setHigh] = useState(null)
-  const [low, setLow] = useState(null)
-  const [funding, setFunding] = useState(null)
-  const [ratio, setRatio] = useState(null)
-  const ws = useRef(null)
+  const [pair, setPair] = useState("BTCUSDT");
+  const [price, setPrice] = useState(null);
+  const [change, setChange] = useState(null);
+  const [high, setHigh] = useState(null);
+  const [low, setLow] = useState(null);
+  const [funding, setFunding] = useState(null);
+  const [ratio, setRatio] = useState(null);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    let stop = false
-    setChange(null)
-    setHigh(null)
-    setLow(null)
-    setFunding(null)
-    setRatio(null)
+    let isMounted = true;
+    setErrors({});
+    setHigh(null);
+    setLow(null);
+    setFunding(null);
+    setRatio(null);
 
-    // PRICE
-    fetch(`https://sinyalrmb.net/backend/api/price.php?symbol=${pair}`, { credentials: "include" })
-      .then(res => res.json())
-      .then(data => {
-        if (!stop && data && data.price) {
-          setPrice(data.price)
+    const fetchAPI = async (endpoint, params, onSuccess, errorKey) => {
+      const query = new URLSearchParams(params).toString();
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/${endpoint}?${query}`, {
+          credentials: "include",
+        });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Error: ${response.statusText}`);
         }
-      })
+        const data = await response.json();
+        if (isMounted) onSuccess(data);
+      } catch (error) {
+        if (isMounted) setErrors((prev) => ({ ...prev, [errorKey]: error.message }));
+      }
+    };
 
-    // KLINE (ambil high/low 24 jam, biasanya pakai interval 1d)
-    fetch(`https://sinyalrmb.net/backend/api/kline.php?symbol=${pair}&interval=1d&limit=1`, { credentials: "include" })
-      .then(res => res.json())
-      .then(data => {
-        if (!stop && Array.isArray(data) && data.length > 0) {
-          setHigh(data[0][2]) // high
-          setLow(data[0][3])  // low
+    fetchAPI( "kline.php", { symbol: pair, interval: "1d", limit: "1" },
+      (data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setHigh(data[0][2]);
+          setLow(data[0][3]);
         }
-      })
+      }, "kline"
+    );
 
-    // FUNDING
-    fetch(`https://sinyalrmb.net/backend/api/funding.php?symbol=${pair}`, { credentials: "include" })
-      .then(res => res.json())
-      .then(data => {
-        if (!stop && Array.isArray(data) && data.length > 0) {
-          setFunding(data[0].fundingRate)
+    fetchAPI( "funding.php", { symbol: pair },
+      (data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setFunding(data[0].fundingRate);
         }
-      })
+      }, "funding"
+    );
 
-    // LONG SHORT RATIO
-    fetch(`https://sinyalrmb.net/backend/api/longshort.php?symbol=${pair}`, { credentials: "include" })
-      .then(res => res.json())
-      .then(data => {
-        if (!stop && Array.isArray(data) && data.length > 0) {
-          const ratioValue = parseFloat(data[0].longShortRatio)
-          if (!isNaN(ratioValue)) setRatio(ratioValue)
-        }
-      })
-      .catch(() => setRatio(NaN))
+    fetchAPI( "longshort.php", { symbol: pair },
+      (data) => {
+        const ratioValue = data && data.length > 0 ? parseFloat(data[0].longShortRatio) : NaN;
+        setRatio(isNaN(ratioValue) ? NaN : ratioValue);
+      }, "ratio"
+    );
 
-    return () => { stop = true }
-  }, [pair])
+    return () => { isMounted = false; };
+  }, [pair]);
 
-  // Untuk harga realtime, bisa tetap pakai WebSocket Binance (atau next step pakai backend kalau mau scalable)
   useEffect(() => {
-    if (ws.current) ws.current.close()
-    setPrice(null)
-    ws.current = new window.WebSocket(
-      `wss://fstream.binance.com/ws/${pair.toLowerCase()}@trade`
-    )
-    ws.current.onmessage = (e) => {
-      const obj = JSON.parse(e.data)
-      setPrice(obj.p)
-    }
-    return () => { if (ws.current) ws.current.close() }
-  }, [pair])
+    setPrice(null);
+    
+    const socket = new WebSocket(`wss://fstream.binance.com/ws/${pair.toLowerCase()}@trade`);
+
+    socket.onmessage = (e) => {
+      setPrice(JSON.parse(e.data).p);
+    };
+
+    socket.onerror = () => {
+      if (socket.readyState !== WebSocket.CLOSED) {
+        setErrors((prev) => ({ ...prev, websocket: "Koneksi harga realtime gagal." }));
+      }
+    };
+    
+    return () => {
+      socket.close();
+    };
+  }, [pair]);
 
   const getRatioBars = () => {
-    if (ratio === null) return <div className="text-secondary">Memuat rasio global…</div>
-    if (isNaN(ratio)) return <div className="text-warning">Rasio tidak tersedia untuk simbol ini.</div>
-    const totalBars = 20
-    const longPercent = Math.min(ratio / (1 + ratio), 1)
-    const longBars = Math.round(totalBars * longPercent)
-    const shortBars = totalBars - longBars
-    const longVisual = "█".repeat(longBars)
-    const shortVisual = "█".repeat(shortBars)
+    if (errors.ratio) return <div className="text-danger small">{errors.ratio}</div>;
+    if (ratio === null) return <div className="text-secondary small">Memuat rasio...</div>;
+    if (isNaN(ratio)) return <div className="text-warning small">Rasio tidak tersedia.</div>;
+    
+    const totalBars = 20;
+    const longPercent = Math.max(0, Math.min(1, ratio / (ratio + 1)));
+    const longBars = Math.round(totalBars * longPercent);
+    const shortBars = totalBars - longBars;
+    const longVisual = "█".repeat(longBars);
+    const shortVisual = "█".repeat(shortBars);
+    
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 15,
-          fontWeight: 600,
-          gap: 12
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 600, gap: 12 }}>
         <span style={{ color: "#47ffaf" }}>LONG {longVisual}</span>
         <span style={{ color: "#ff6d6d" }}>SHORT {shortVisual}</span>
       </div>
-    )
-  }
+    );
+  };
+
+  const renderDataPoint = (label, value, errorKey, formatFn) => (
+    <div className="d-flex justify-content-between">
+      <span>{label}</span>
+      {errors[errorKey] ? (
+        <span className="text-danger small" style={{maxWidth: '50%', textAlign: 'right'}}>{errors[errorKey]}</span>
+      ) : (
+        <span>{value !== null ? (formatFn ? formatFn(value) : value) : "..."}</span>
+      )}
+    </div>
+  );
 
   return (
     <div className="container py-4" style={{ maxWidth: 540 }}>
@@ -108,55 +123,31 @@ export default function DashboardPage({ role }) {
           <div style={{ maxWidth: 220, minWidth: 120, flex: "1 0 auto" }}>
             <DropdownSymbols value={pair} onSelect={setPair} />
           </div>
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: 1,
-              color: "#ffe8aa",
-              marginLeft: 10,
-              minWidth: 0,
-              flex: "1 1 120px",
-              textAlign: "left",
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-              textOverflow: "ellipsis"
-            }}
-          >
-            <span style={{ color: "#ffd87a", fontWeight: 900 }}>
-              {price ? Number(price).toLocaleString() : <span className="text-secondary">Loading...</span>}
-            </span>
-            <span style={{ fontSize: 15, marginLeft: 12 }}>
-              {change !== null &&
-                <span style={{ color: change > 0 ? "#47ffaf" : "#ff6d6d" }}>
-                  ({change > 0 && "+"}{Number(change).toFixed(2)}%)
-                </span>
-              }
-            </span>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 1, color: "#ffe8aa", marginLeft: 10, minWidth: 0, flex: "1 1 120px", textAlign: "left", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+            {errors.websocket ? <span className="text-danger small">{errors.websocket}</span> :
+             price ? (
+                <>
+                    <span style={{ color: "#ffd87a", fontWeight: 900 }}>{Number(price).toLocaleString()}</span>
+                    {change !== null && (
+                        <span style={{ fontSize: 15, marginLeft: 12, color: change > 0 ? "#47ffaf" : "#ff6d6d" }}>
+                            ({change > 0 && "+"}{Number(change).toFixed(2)}%)
+                        </span>
+                    )}
+                </>
+             ) : (
+                <span className="text-secondary">Memuat harga...</span>
+             )}
           </div>
         </div>
-
-        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }} />
-
+        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }}/>
         <div className="d-flex flex-column gap-1 text-light mb-3" style={{ fontSize: 15, fontWeight: 600 }}>
-          <div className="d-flex justify-content-between">
-            <span>High (24h)</span>
-            <span>{high ? Number(high).toLocaleString() : "—"}</span>
-          </div>
-          <div className="d-flex justify-content-between">
-            <span>Low (24h)</span>
-            <span>{low ? Number(low).toLocaleString() : "—"}</span>
-          </div>
-          <div className="d-flex justify-content-between">
-            <span>Funding Rate</span>
-            <span>{funding ? `${(funding * 100).toFixed(4)}%` : "—"}</span>
-          </div>
+          {renderDataPoint("High (24h)", high, "kline", (val) => Number(val).toLocaleString())}
+          {renderDataPoint("Low (24h)", low, "kline", (val) => Number(val).toLocaleString())}
+          {renderDataPoint("Funding Rate", funding, "funding", (val) => `${(val * 100).toFixed(4)}%`)}
         </div>
-
-        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }} />
-
+        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }}/>
         {getRatioBars()}
       </CardGlass>
     </div>
-  )
+  );
 }
