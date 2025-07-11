@@ -1,27 +1,24 @@
 <?php
-require 'config.php';
-$data = json_decode(file_get_contents("php://input"), true);
-$username = $conn->real_escape_string($data['username'] ?? '');
-$password = $data['password'] ?? '';
-$email = $conn->real_escape_string($data['email'] ?? '');
-if (!$username || !$password || !$email) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid input']);
-    exit;
-}
-$stmt = $conn->prepare("SELECT id FROM users WHERE username=? OR email=?");
-$stmt->bind_param("ss", $username, $email);
-$stmt->execute();
-$stmt->store_result();
-if ($stmt->num_rows > 0) {
-    http_response_code(409);
-    echo json_encode(['error' => 'User already exists']);
-    exit;
-}
-$stmt->close();
-$hashed = password_hash($password, PASSWORD_BCRYPT);
-$stmt = $conn->prepare("INSERT INTO users (username, password, email) VALUES (?, ?, ?)");
-$stmt->bind_param("sss", $username, $hashed, $email);
-$stmt->execute();
-echo json_encode(['success' => true]);
+require_once 'cors.php';
+require_once 'db.php';
+require_once 'utils/response.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendResponse(['error'=>'Invalid'],405);
+$data = json_decode(file_get_contents('php://input'),true);
+
+$username = trim($data['username']??'');
+$password = $data['password']??'';
+$email = trim($data['email']??'');
+
+if (!$username || !$password || !$email) sendResponse(['error'=>'Semua field wajib diisi'],400);
+
+$db = getDB();
+$stmt = $db->prepare("SELECT id FROM users WHERE username=? OR email=? LIMIT 1");
+$stmt->execute([$username,$email]);
+if ($stmt->fetch()) sendResponse(['error'=>'Username/email sudah terdaftar'],400);
+
+$hash = password_hash($password,PASSWORD_DEFAULT);
+$stmt = $db->prepare("INSERT INTO users(username,password,email) VALUES(?,?,?)");
+$stmt->execute([$username,$hash,$email]);
+sendResponse(['success'=>true]);
 ?>
