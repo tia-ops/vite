@@ -1,51 +1,105 @@
-import React, { useEffect, useRef, memo } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import React from 'react';
+import { createChart } from 'lightweight-charts';
 
-function ChartComponent({ data }) {
-  const chartContainerRef = useRef();
+class Chart extends React.Component {
+  constructor(props) {
+    super(props);
+    this.chartRef = React.createRef();
+    this.chart = null;
+    this.series = null;
+  }
 
-  useEffect(() => {
-    if (!data || data.length === 0) return;
+  componentDidMount() {
+    this.createChart();
+  }
 
-    const chart = createChart(chartContainerRef.current, {
+  componentDidUpdate(prevProps) {
+    if (prevProps.data !== this.props.data && this.series) {
+      this.series.setData(this.props.data);
+      if (this.chart) {
+        // Adjust view to fit the new data
+        this.chart.timeScale().fitContent();
+      }
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.chart) {
+      this.chart.remove();
+    }
+  }
+
+  createChart = () => {
+    if (!this.chartRef.current) return;
+
+    if (this.chart) {
+      this.chart.remove();
+    }
+
+    this.chart = createChart(this.chartRef.current, {
+      width: this.chartRef.current.clientWidth,
+      height: 300,
       layout: {
-        background: { type: ColorType.Solid, color: '#161a1e' },
-        textColor: 'rgba(255, 255, 255, 0.9)',
+        backgroundColor: '#161a1e',
+        textColor: '#d1d4dc',
       },
       grid: {
-        vertLines: { color: '#2B2B43' },
-        horzLines: { color: '#2B2B43' },
+        vertLines: {
+          color: '#334158',
+        },
+        horzLines: {
+          color: '#334158',
+        },
       },
-      width: chartContainerRef.current.clientWidth,
-      height: 500,
+      crosshair: {
+        mode: 1,
+      },
+      priceScale: {
+        borderColor: '#485c7b',
+      },
+      timeScale: {
+        borderColor: '#485c7b',
+        timeVisible: true,
+      },
     });
 
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderDownColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
+    this.series = this.chart.addCandlestickSeries({
+      upColor: '#4bffb5',
+      downColor: '#ff4976',
+      borderDownColor: '#ff4976',
+      borderUpColor: '#4bffb5',
+      wickDownColor: '#838ca1',
+      wickUpColor: '#838ca1',
     });
 
-    candleSeries.setData(data);
+    if (this.props.data && this.props.data.length > 0) {
+      this.series.setData(this.props.data);
+    }
 
-    chart.timeScale().fitContent();
-
-    const handleResize = () => chart.resize(chartContainerRef.current.clientWidth, 500);
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
+    // Handle resize
+    const handleResize = () => {
+      if (this.chart && this.chartRef.current) {
+        this.chart.applyOptions({
+          width: this.chartRef.current.clientWidth,
+        });
+      }
     };
-  }, [data]);
 
-  return <div ref={chartContainerRef} style={{ width: '100%', height: '500px' }} />;
+    window.addEventListener('resize', handleResize);
+    this.handleResize = handleResize; // Save for cleanup
+  };
+
+  render() {
+    return (
+      <div
+        ref={this.chartRef}
+        style={{
+          width: '100%',
+          height: '300px',
+        }}
+      />
+    );
+  }
 }
-
-// Memoize the component to prevent re-renders if data hasn't changed
-const Chart = memo(ChartComponent);
 
 export default Chart;

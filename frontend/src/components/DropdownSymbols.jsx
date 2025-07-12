@@ -1,149 +1,289 @@
-import React, { useState, useEffect, useRef } from "react"
-import axios from "axios"
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import axios from "axios";
 
 export default function DropdownSymbols({ value, onSelect }) {
-  const [open, setOpen] = useState(false)
-  const [symbols, setSymbols] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [keyword, setKeyword] = useState("")
-  const [error, setError] = useState(null)
-  const inputRef = useRef()
+  const [open, setOpen] = useState(false);
+  const [symbols, setSymbols] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [error, setError] = useState(null);
+  const inputRef = useRef();
+  const dropdownRef = useRef();
 
+  // Fetch symbols
   useEffect(() => {
-    setLoading(true)
-    axios.get("https://sinyalrmb.net/backend/api/symbols.php", { withCredentials: true })
-      .then(res => {
-        const raw = res.data
-        let list = []
-        // Jika data Binance, ambil symbols PERPETUAL
-        if (raw && raw.symbols) {
-          list = raw.symbols
+    const fetchSymbols = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get("https://sinyalrmb.net/backend/api/symbols.php", { 
+          withCredentials: true 
+        });
+        
+        if (response.data?.symbols) {
+          const list = response.data.symbols
             .filter(s => s.contractType === "PERPETUAL")
             .map(s => s.symbol)
-            .sort()
+            .sort();
+          setSymbols(list);
+        } else {
+          throw new Error("Invalid data format");
         }
-        setSymbols(list)
-        setLoading(false)
-      })
-      .catch(() => {
-        setError("Gagal fetch simbol Binance!")
-        setLoading(false)
-      })
-  }, [])
+      } catch (err) {
+        console.error("Symbol fetch error:", err);
+        setError("Failed to load symbols");
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchSymbols();
+  }, []);
+
+  // Focus input on open
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus()
-    if (!open) setKeyword("")
-  }, [open])
+    if (open && inputRef.current) {
+      inputRef.current.focus();
+    }
+    if (!open) {
+      setKeyword("");
+    }
+  }, [open]);
 
-  const filtered = symbols.filter(s => s.toLowerCase().includes(keyword.toLowerCase()))
+  // Click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
 
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [open]);
+
+  // Filtered symbols with memo
+  const filtered = useMemo(() => {
+    const search = keyword.toLowerCase().trim();
+    return symbols.filter(s => s.toLowerCase().includes(search));
+  }, [symbols, keyword]);
+
+  // Keyboard navigation
   const handleInputKeyDown = (e) => {
     if (e.key === "Enter" && keyword.trim()) {
-      setOpen(false)
-      if (onSelect) onSelect(keyword.trim().toUpperCase())
+      setOpen(false);
+      onSelect?.(keyword.trim().toUpperCase());
     }
-    if (e.key === "Escape") setOpen(false)
-  }
+    if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
 
   return (
-    <div style={{ width: "100%", position: "relative", maxWidth: 180 }}>
+    <div ref={dropdownRef} className="symbol-dropdown" style={{ 
+      width: "100%", 
+      position: "relative",
+      maxWidth: 180 
+    }}>
       <button
-        className="btn btn-outline-success d-flex justify-content-between align-items-center"
+        className="symbol-button"
         style={{
-          borderRadius: 7,
-          fontWeight: 700,
-          padding: "7px 13px",
-          fontSize: 17,
           width: "100%",
           height: 44,
-          background: "rgba(26,30,44,0.80)"
+          padding: "7px 16px",
+          background: "rgba(26,30,44,0.95)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 8,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          transition: "all 0.2s ease",
+          position: "relative",
+          overflow: "hidden"
         }}
         onClick={() => setOpen(v => !v)}
         type="button"
-        tabIndex={0}
       >
         <span style={{
-          letterSpacing: 1,
+          fontSize: 17,
           fontWeight: 700,
           color: "#ffd87a",
-          fontSize: 17
+          letterSpacing: 1,
+          flexGrow: 1,
+          textAlign: "left",
+          marginRight: 8
         }}>
-          {value || "Pilih…"}
+          {value || "Select..."}
         </span>
-        <span style={{ fontSize: 18, color: "#aaa", marginLeft: 9 }}>{open ? "▲" : "▼"}</span>
+        <svg 
+          width="16" 
+          height="16" 
+          viewBox="0 0 16 16" 
+          style={{
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease',
+            opacity: 0.6
+          }}
+        >
+          <path 
+            fill="currentColor" 
+            d="M8 10L3 5h10l-5 5z"
+          />
+        </svg>
       </button>
+
       {open && (
         <div
+          className="symbol-dropdown-menu"
           style={{
             position: "absolute",
             left: 0,
-            top: 48,
-            width: "100%",
-            zIndex: 1001,
-            background: "rgba(28,32,54,0.99)",
-            borderRadius: 10,
-            marginTop: 3,
-            boxShadow: "0 4px 20px 0 rgba(0,0,0,0.13)",
-            border: "1px solid #23263a",
-            padding: 8
+            right: 0,
+            top: "calc(100% + 4px)",
+            background: "rgba(28,32,54,0.98)",
+            backdropFilter: "blur(10px)",
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.2)",
+            padding: 8,
+            zIndex: 1000,
+            animation: "dropdownFade 0.2s ease"
           }}
         >
-          <input
-            ref={inputRef}
-            type="text"
-            className="form-control mb-2"
-            placeholder="Ketik simbol…"
-            value={keyword}
-            onChange={e => setKeyword(e.target.value)}
-            onKeyDown={handleInputKeyDown}
-            style={{
-              borderRadius: 7,
-              background: "#181b2c",
-              color: "#fff",
-              fontSize: 16,
-              fontWeight: 700,
-              border: "1px solid #25254a"
-            }}
-          />
-          <div style={{ maxHeight: 160, overflowY: "auto" }}>
-            {loading && <div className="text-secondary py-2">Loading…</div>}
-            {error && <div className="text-danger py-2">{error}</div>}
-            {filtered.length === 0 && !loading && !error && (
-              <div className="text-secondary py-2">Tidak ada simbol</div>
+          <div className="search-container" style={{ marginBottom: 8 }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Search symbol..."
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                background: "rgba(24,27,44,0.95)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                color: "#fff",
+                fontSize: 15,
+                fontWeight: 500,
+                outline: "none",
+                transition: "border-color 0.2s ease"
+              }}
+            />
+          </div>
+
+          <div style={{ 
+            maxHeight: 240,
+            overflowY: "auto",
+            scrollbarWidth: "thin",
+            scrollbarColor: "#666 transparent"
+          }}>
+            {loading && (
+              <div style={{ 
+                padding: "12px 8px",
+                color: "rgba(255,255,255,0.6)",
+                textAlign: "center"
+              }}>
+                Loading symbols...
+              </div>
             )}
-            {filtered.map(sym => (
+
+            {error && (
+              <div style={{ 
+                padding: "12px 8px",
+                color: "#ff6b6b",
+                textAlign: "center"
+              }}>
+                {error}
+              </div>
+            )}
+
+            {!loading && !error && filtered.length === 0 && (
+              <div style={{ 
+                padding: "12px 8px",
+                color: "rgba(255,255,255,0.6)",
+                textAlign: "center"
+              }}>
+                No symbols found
+              </div>
+            )}
+
+            {filtered.map(symbol => (
               <button
-                key={sym}
-                className="btn btn-sm w-100 btn-outline-light mb-1 text-nowrap"
-                style={{
-                  borderRadius: 7,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  fontSize: 16,
-                  textAlign: "left"
-                }}
+                key={symbol}
                 onClick={() => {
-                  setOpen(false)
-                  if (onSelect) onSelect(sym)
+                  setOpen(false);
+                  onSelect?.(symbol);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  display: "block",
+                  margin: "2px 0",
+                  ":hover": {
+                    background: "rgba(255,255,255,0.1)"
+                  }
                 }}
               >
-                {sym}
+                {symbol}
               </button>
             ))}
           </div>
         </div>
       )}
-      {open && (
-        <div
-          onClick={() => setOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 900
-          }}
-        />
-      )}
+
+      <style>{`
+        .symbol-dropdown button:hover {
+          background: rgba(26,30,44,1);
+          border-color: rgba(255,255,255,0.15);
+        }
+        
+        .symbol-dropdown input:focus {
+          border-color: #ffd87a;
+        }
+        
+        .symbol-dropdown-menu button:hover {
+          background: rgba(255,255,255,0.1);
+        }
+
+        @keyframes dropdownFade {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        /* Scrollbar Styles */
+        .symbol-dropdown-menu > div::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .symbol-dropdown-menu > div::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .symbol-dropdown-menu > div::-webkit-scrollbar-thumb {
+          background-color: rgba(255,255,255,0.2);
+          border-radius: 3px;
+        }
+      `}</style>
     </div>
-  )
+  );
 }

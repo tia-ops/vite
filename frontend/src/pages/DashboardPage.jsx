@@ -1,140 +1,304 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import DropdownSymbols from "../components/DropdownSymbols";
-import Card from "../components/Card"; // Ganti ke Card
+import Card from "../components/Card";
+import Chart from "../components/Chart";
 import API_BASE_URL from "../apiConfig";
 
 export default function DashboardPage({ role }) {
   const [pair, setPair] = useState("BTCUSDT");
   const [data, setData] = useState({
     price: null,
-    change: null,
     high: null,
     low: null,
     funding: null,
     ratio: null,
   });
+  const [chartData, setChartData] = useState([]);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
+  // Fungsi untuk mengambil data kline
+  const fetchKlineData = useCallback(async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/kline.php?symbol=${pair}&interval=1d&limit=30`,
+      { credentials: "include" }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Kline data error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error('Invalid kline data format');
+    }
+    
+    return data;
+  }, [pair]);
+
+  // Fungsi untuk mengambil data funding rate
+  const fetchFundingData = useCallback(async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/funding.php?symbol=${pair}`,
+      { credentials: "include" }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Funding rate error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+    
+    return data[0]?.fundingRate || null;
+  }, [pair]);
+
+  // Fungsi untuk mengambil data ratio
+  const fetchRatioData = useCallback(async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/longshort.php?symbol=${pair}`,
+      { credentials: "include" }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Long/Short ratio error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      return null;
+    }
+    
+    return data[0]?.longShortRatio ? parseFloat(data[0].longShortRatio) : null;
+  }, [pair]);
+
+  // Effect untuk mengambil semua data
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    setErrors({});
+    
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      setErrors({});
 
-    const fetchAPIData = async () => {
       try {
-        const endpoints = {
-          kline: `${API_BASE_URL}/api/kline.php?symbol=${pair}&interval=1d&limit=1`,
-          funding: `${API_BASE_URL}/api/funding.php?symbol=${pair}`,
-          ratio: `${API_BASE_URL}/api/longshort.php?symbol=${pair}`,
-        };
+        const [klineData, fundingRate, ratio] = await Promise.all([
+          fetchKlineData(),
+          fetchFundingData(),
+          fetchRatioData()
+        ]);
 
-        const requests = Object.values(endpoints).map(url =>
-          fetch(url, { credentials: "include" }).then(res => {
-            if (!res.ok) return res.json().then(err => Promise.reject(err));
-            return res.json();
-          })
-        );
-        
-        const [klineData, fundingData, ratioData] = await Promise.all(requests);
+        if (!isMounted) return;
 
+        // Update chart data
+        const formattedChartData = klineData.map(candle => ({
+          time: Math.floor(Number(candle[0]) / 1000),
+          open: Number(candle[1]),
+          high: Number(candle[2]),
+          low: Number(candle[3]),
+          close: Number(candle[4])
+        }));
+
+        setChartData(formattedChartData);
+
+        // Update price data
+        setData(prev => ({
+          ...prev,
+          high: klineData[klineData.length - 1][2],
+          low: klineData[klineData.length - 1][3],
+          funding: fundingRate,
+          ratio: ratio
+        }));
+
+      } catch (error) {
+        console.error('Data fetch error:', error);
         if (isMounted) {
-          setData(prev => ({
+          setErrors(prev => ({
             ...prev,
-            high: klineData?.[0]?.[2] || null,
-            low: klineData?.[0]?.[3] || null,
-            funding: fundingData?.[0]?.fundingRate || null,
-            ratio: ratioData?.[0]?.longShortRatio ? parseFloat(ratioData[0].longShortRatio) : NaN,
+            api: error.message || "Failed to load data"
           }));
         }
-      } catch (error) {
-        if (isMounted) {
-          setErrors(prev => ({ ...prev, api: error.error || "Gagal memuat data." }));
-        }
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
-    fetchAPIData();
+    fetchAllData();
 
-    return () => { isMounted = false; };
-  }, [pair]);
-
-  useEffect(() => {
-    setData(prev => ({ ...prev, price: null, change: null }));
-
-    const socket = new WebSocket(`wss://fstream.binance.com/ws/${pair.toLowerCase()}@trade`);
+    // WebSocket connection untuk real-time price
+    const wsUrl = `wss://fstream.binance.com/ws/${pair.toLowerCase()}@trade`;
+    const ws = new WebSocket(wsUrl);
     
-    socket.onmessage = (event) => {
+    ws.onopen = () => {
+      console.log(`WebSocket connected: ${wsUrl}`);
+    };
+
+    ws.onmessage = (event) => {
+      if (!isMounted) return;
+      try {
         const trade = JSON.parse(event.data);
         setData(prev => ({ ...prev, price: trade.p }));
+      } catch (error) {
+        console.error('WebSocket parse error:', error);
+      }
     };
 
-    socket.onerror = () => {
-        setErrors((prev) => ({ ...prev, websocket: "Koneksi harga realtime gagal." }));
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      if (isMounted) {
+        setErrors(prev => ({
+          ...prev,
+          websocket: "Real-time connection failed"
+        }));
+      }
     };
 
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+
+    // Cleanup function
     return () => {
-      socket.close();
+      isMounted = false;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     };
-  }, [pair]);
+  }, [pair, fetchKlineData, fetchFundingData, fetchRatioData]);
+
+  // Format number with proper decimals
+  const formatNumber = (value) => {
+    if (value === null || value === undefined) return 'N/A';
+    return Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
 
   const getRatioBars = () => {
     if (errors.api) return <div className="text-danger small">{errors.api}</div>;
-    if (isLoading) return <div className="text-secondary small">Memuat rasio...</div>;
-    if (isNaN(data.ratio)) return <div className="text-warning small">Rasio tidak tersedia.</div>;
-    
-    const totalBars = 20;
+    if (isLoading) return <div className="text-secondary small">Loading ratio...</div>;
+    if (isNaN(data.ratio)) return <div className="text-warning small">Ratio unavailable</div>;
+
     const longPercent = Math.max(0, Math.min(1, data.ratio / (data.ratio + 1)));
-    const longBars = Math.round(totalBars * longPercent);
-    const shortBars = totalBars - longBars;
+    const longPercentDisplay = Math.round(longPercent * 100);
+    const shortPercentDisplay = 100 - longPercentDisplay;
     
     return (
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 600, gap: 12 }}>
-        <span style={{ color: "#47ffaf" }}>LONG {"█".repeat(longBars)}</span>
-        <span style={{ color: "#ff6d6d" }}>SHORT {"█".repeat(shortBars)}</span>
+      <div style={{ fontSize: 14, color: '#d1d4dc' }}>
+        <div className="d-flex justify-content-between mb-2" style={{ fontWeight: 600 }}>
+          <span>Global Long/Short Ratio</span>
+          <span>{data.ratio ? data.ratio.toFixed(2) : 'N/A'}</span>
+        </div>
+        <div style={{ 
+          width: '100%', 
+          height: '24px',
+          background: 'rgba(26,30,44,0.5)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          display: 'flex'
+        }}>
+          <div style={{
+            width: `${longPercentDisplay}%`,
+            background: '#47ffaf',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#0a2817',
+            fontSize: '12px',
+            fontWeight: '600',
+            transition: 'width 0.3s ease'
+          }}>
+            {longPercentDisplay}%
+          </div>
+          <div style={{
+            width: `${shortPercentDisplay}%`,
+            background: '#ff6d6d',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#2a1215',
+            fontSize: '12px',
+            fontWeight: '600',
+            transition: 'width 0.3s ease'
+          }}>
+            {shortPercentDisplay}%
+          </div>
+        </div>
       </div>
     );
   };
 
-  const renderDataPoint = (label, value, errorKey, formatFn) => (
-    <div className="d-flex justify-content-between">
-      <span>{label}</span>
-      {errors[errorKey] ? (
-        <span className="text-danger small" style={{maxWidth: '50%', textAlign: 'right'}}>{errors[errorKey]}</span>
-      ) : (
-        <span>{isLoading ? "..." : (value !== null && value !== undefined ? (formatFn ? formatFn(value) : value) : "N/A")}</span>
-      )}
-    </div>
-  );
-
   return (
     <div className="container py-4" style={{ maxWidth: 540 }}>
-      <Card type="glass"> {/* Menggunakan Card */}
-        <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-          <div style={{ maxWidth: 220, minWidth: 120, flex: "1 0 auto" }}>
-            <DropdownSymbols value={pair} onSelect={setPair} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 1, color: "#ffe8aa", marginLeft: 10, minWidth: 0, flex: "1 1 120px", textAlign: "left", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-            {errors.websocket ? <span className="text-danger small">{errors.websocket}</span> :
-             data.price ? (
-                <>
-                    <span style={{ color: "#ffd87a", fontWeight: 900 }}>{Number(data.price).toLocaleString()}</span>
-                </>
-             ) : (
-                <span className="text-secondary">Memuat harga...</span>
-             )}
+      <Card type="glass">
+        <div className="d-flex align-items-center gap-3 mb-4">
+          <DropdownSymbols value={pair} onSelect={setPair} />
+          <div className="d-flex align-items-baseline">
+            {errors.websocket ? (
+              <span className="text-danger small">{errors.websocket}</span>
+            ) : data.price ? (
+              <>
+                <span style={{ 
+                  fontSize: 26,
+                  fontWeight: 800,
+                  color: "#ffd87a",
+                  letterSpacing: 0.5,
+                  marginLeft: 8
+                }}>
+                  {formatNumber(data.price)}
+                </span>
+                <span style={{ 
+                  fontSize: 13, 
+                  color: 'rgba(255,255,255,0.5)', 
+                  fontWeight: 600,
+                  marginLeft: 6
+                }}>USDT</span>
+              </>
+            ) : (
+              <span className="text-secondary ms-2">Loading price...</span>
+            )}
           </div>
         </div>
-        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }}/>
-        <div className="d-flex flex-column gap-1 text-light mb-3" style={{ fontSize: 15, fontWeight: 600 }}>
-          {renderDataPoint("High (24h)", data.high, "api", (val) => Number(val).toLocaleString())}
-          {renderDataPoint("Low (24h)", data.low, "api", (val) => Number(val).toLocaleString())}
-          {renderDataPoint("Funding Rate", data.funding, "api", (val) => `${(val * 100).toFixed(4)}%`)}
+        
+        <div style={{
+          background: 'rgba(26,30,44,0.3)',
+          borderRadius: 12,
+          padding: '16px',
+          marginBottom: 16
+        }}>
+          <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h High</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#47ffaf' }}>
+                {formatNumber(data.high)}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h Low</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#ff6d6d' }}>
+                {formatNumber(data.low)}
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Funding Rate</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#ffd87a' }}>
+              {data.funding ? `${(data.funding * 100).toFixed(4)}%` : 'N/A'}
+            </div>
+          </div>
         </div>
-        <hr style={{ border: "0", borderTop: "1px solid rgba(255,255,255,0.25)", margin: "10px 0" }}/>
+
         {getRatioBars()}
+
+        <div className="mt-3">
+          <Card type="glass">
+            <Chart data={chartData} />
+          </Card>
+        </div>
       </Card>
     </div>
   );
