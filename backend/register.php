@@ -1,5 +1,21 @@
 <?php
 // FILE: backend/register.php
+
+// --- CORS Header Correction ---
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+// The browser sends a "pre-flight" OPTIONS request first to check permissions.
+// This block handles that request and tells the browser it's okay to proceed.
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(204);
+    exit();
+}
+// --- End of Correction ---
+
+
+// --- Your Original Code ---
 require_once 'bootstrap.php';
 require_once 'db.php';
 require_once 'utils/response.php';
