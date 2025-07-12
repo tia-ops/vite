@@ -4,8 +4,32 @@ import Card from "../components/Card";
 import Chart from "../components/Chart";
 import API_BASE_URL from "../apiConfig";
 
+// Window size hook for responsive layout
+const useWindowSize = () => {
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    isLargeScreen: window.innerWidth >= 768
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        isLargeScreen: window.innerWidth >= 768
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return windowSize;
+};
+
 export default function DashboardPage({ role }) {
+  const { isLargeScreen } = useWindowSize();
   const [pair, setPair] = useState("BTCUSDT");
+  const [timeframe, setTimeframe] = useState("1d");
   const [data, setData] = useState({
     price: null,
     high: null,
@@ -17,10 +41,20 @@ export default function DashboardPage({ role }) {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(true);
 
+  const timeframes = [
+    { value: "3m", label: "3m" },
+    { value: "5m", label: "5m" },
+    { value: "15m", label: "15m" },
+    { value: "1h", label: "1H" },
+    { value: "4h", label: "4H" },
+    { value: "12h", label: "12H" },
+    { value: "1d", label: "1D" },
+  ];
+
   // Fungsi untuk mengambil data kline
   const fetchKlineData = useCallback(async () => {
     const response = await fetch(
-      `${API_BASE_URL}/api/kline.php?symbol=${pair}&interval=1d&limit=30`,
+      `${API_BASE_URL}/api/kline.php?symbol=${pair}&interval=${timeframe}&limit=100`,
       { credentials: "include" }
     );
     
@@ -34,7 +68,7 @@ export default function DashboardPage({ role }) {
     }
     
     return data;
-  }, [pair]);
+  }, [pair, timeframe]);
 
   // Fungsi untuk mengambil data funding rate
   const fetchFundingData = useCallback(async () => {
@@ -233,73 +267,95 @@ export default function DashboardPage({ role }) {
   };
 
   return (
-    <div className="container py-4" style={{ maxWidth: 540 }}>
-      <Card type="glass">
-        <div className="d-flex align-items-center gap-3 mb-4">
-          <DropdownSymbols value={pair} onSelect={setPair} />
-          <div className="d-flex align-items-baseline">
-            {errors.websocket ? (
-              <span className="text-danger small">{errors.websocket}</span>
-            ) : data.price ? (
-              <>
-                <span style={{ 
-                  fontSize: 26,
-                  fontWeight: 800,
-                  color: "#ffd87a",
-                  letterSpacing: 0.5,
-                  marginLeft: 8
-                }}>
-                  {formatNumber(data.price)}
-                </span>
-                <span style={{ 
-                  fontSize: 13, 
-                  color: 'rgba(255,255,255,0.5)', 
-                  fontWeight: 600,
-                  marginLeft: 6
-                }}>USDT</span>
-              </>
-            ) : (
-              <span className="text-secondary ms-2">Loading price...</span>
-            )}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isLargeScreen ? 'repeat(12, 1fr)' : '1fr',
+      gap: '20px',
+      padding: '20px'
+    }}>
+      {/* Left Side Content - 6 columns on desktop */}
+      <div style={{
+        gridColumn: isLargeScreen ? '1 / 7' : '1 / -1',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <Card type="glass">
+          <div className="d-flex align-items-center gap-3 mb-4">
+            <DropdownSymbols value={pair} onSelect={setPair} />
+            <div className="d-flex align-items-baseline">
+              {errors.websocket ? (
+                <span className="text-danger small">{errors.websocket}</span>
+              ) : data.price ? (
+                <>
+                  <span style={{ 
+                    fontSize: 26,
+                    fontWeight: 800,
+                    color: "#ffd87a",
+                    letterSpacing: 0.5,
+                    marginLeft: 8
+                  }}>
+                    {formatNumber(data.price)}
+                  </span>
+                  <span style={{ 
+                    fontSize: 13, 
+                    color: 'rgba(255,255,255,0.5)', 
+                    fontWeight: 600,
+                    marginLeft: 6
+                  }}>USDT</span>
+                </>
+              ) : (
+                <span className="text-secondary ms-2">Loading price...</span>
+              )}
+            </div>
           </div>
-        </div>
-        
-        <div style={{
-          background: 'rgba(26,30,44,0.3)',
-          borderRadius: 12,
-          padding: '16px',
-          marginBottom: 16
-        }}>
-          <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h High</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#47ffaf' }}>
-                {formatNumber(data.high)}
+
+
+          <div style={{
+            background: 'rgba(26,30,44,0.3)',
+            borderRadius: 12,
+            padding: '16px',
+            marginBottom: 16
+          }}>
+            <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h High</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#47ffaf' }}>
+                  {formatNumber(data.high)}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h Low</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: '#ff6d6d' }}>
+                  {formatNumber(data.low)}
+                </div>
               </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>24h Low</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#ff6d6d' }}>
-                {formatNumber(data.low)}
+            <div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Funding Rate</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#ffd87a' }}>
+                {data.funding ? `${(data.funding * 100).toFixed(4)}%` : 'N/A'}
               </div>
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Funding Rate</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#ffd87a' }}>
-              {data.funding ? `${(data.funding * 100).toFixed(4)}%` : 'N/A'}
-            </div>
-          </div>
-        </div>
 
-        {getRatioBars()}
+          {getRatioBars()}
+        </Card>
+        {/* Add other left side components here */}
+      </div>
 
-        <div className="mt-3">
-          <Card type="glass">
-            <Chart data={chartData} />
-          </Card>
-        </div>
-      </Card>
+      {/* Right Side - Chart - 6 columns on desktop */}
+      <div style={{
+        gridColumn: isLargeScreen ? '7 / -1' : '1 / -1'
+      }}>
+        <Card type="glass">
+          <Chart 
+            data={chartData} 
+            timeframe={timeframe}
+            onTimeframeChange={setTimeframe}
+          />
+        </Card>
+      </div>
     </div>
   );
 }
